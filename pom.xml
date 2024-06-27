@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.tom</groupId>
-    <artifactId>tom-chat</artifactId>
+    <artifactId>cometd-chat</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>tom-chat</name>
+    <name>cometd-chat</name>
     <description>tom-chat project for Spring Boot</description>
 
 

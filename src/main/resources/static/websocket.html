@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>chat</title>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.js"></script>
+    <script type="text/javascript" src="./js/cometd.js"></script>
+    <script type="text/javascript" src="./js/AckExtension.js"></script>
+    <script type="text/javascript" src="./js/jquery.cometd.js"></script>
+    <script type="text/javascript" src="./js/jquery.cometd-ack.js"></script>
+    <script type="text/javascript" src="./js/ReloadExtension.js"></script>
+    <script type="text/javascript" src="./js/jquery.cometd-reload.js"></script>
+    <style>
+        /* Set body and html to 100% height to make it full screen */
+        body, html {
+            height: 100%;
+            margin: 0;
+        }
+
+        /* Set chat-container to full screen height and display as a flex container */
+        #chat-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Style for the black title bar */
+        #chat-window-title {
+            background-color: #333;
+            color: #fff;
+            padding: 10px;
+        }
+
+        /* Make chat-window grow and scroll within the container */
+        #chat-window {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            background-color: #f5f5f5;
+            overflow: auto;
+        }
+
+        #chat-window-messages {
+            padding: 10px;
+        }
+
+        /* Style for the input area */
+        #chat-window-input-container {
+            background-color: #fff;
+            display: flex;
+            align-items: center;
+            padding: 10px;
+        }
+
+        #chat-window-input {
+            flex-grow: 1;
+            padding: 10px;
+        }
+
+        #chat-window-send {
+            padding: 10px;
+            background-color: #333;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        #chat-window-send:hover {
+            background-color: #555;
+        }
+    </style>
+
+</head>
+<body>
+<div id="chat-container">
+    <div id="chat-window-title">chat</div>
+    <div id="chat-window">
+        <div id="chat-window-messages"></div>
+    </div>
+    <div id="chat-window-input-container">
+        <input type="text" id="chat-window-input" placeholder="enter a message...">
+        <button id="chat-window-send">send</button>
+        <button id="chat-unsubscribe">unsubscribe</button>
+    </div>
+</div>
+
+<script>
+
+    var cometd = $.cometd;
+
+    // cometd.unregisterTransport('websocket');
+    cometd.unregisterTransport('callback-polling');
+    cometd.unregisterTransport('long-polling');
+
+
+    $(window).on('beforeunload', function () {
+        cometd.reload();
+    });
+
+
+    cometd.configure({
+        // url: 'http://localhost:8081/cometd', // CometD服务器的URL
+        url: 'https://testmail.tom.com/chat/cometd', // CometD服务器的URL
+        logLevel: 'debug',
+    });
+
+    var chatChannel = '/chat/privatechat';
+    var s;
+
+    function subscribeToChat() {
+        cometd.handshake(function (handshakeReply) {
+            if (handshakeReply.successful) {
+                console.log('Handshake successful');
+                // 订阅聊天消息
+                s = cometd.subscribe(chatChannel, function (message) {
+                    var messageData = message.data;
+                    $('#chat-window-messages').append('<p>' + messageData.content + '</p>');
+                    $('#chat-window').scrollTop($('#chat-window')[0].scrollHeight);
+                }, function (subscribeReply) {
+                    if (subscribeReply.successful) {
+                        $('#chat-window-messages').append('<p>Subscribed to ' + chatChannel + '</p>');
+                    } else {
+                        $('#chat-window-messages').append('<p>Could not subscribe to ' + chatChannel + '</p>');
+                        // 握手失败，执行重新握手逻辑
+                        window.localStorage.removeItem('org.cometd.reload');
+                        subscribeToChat(); // 递归调用重新握手
+                    }
+                });
+            } else {
+                console.log('Handshake failed');
+                window.localStorage.removeItem('org.cometd.reload');
+                subscribeToChat(); // 递归调用重新握手
+            }
+        });
+    }
+
+    // 初始调用
+    subscribeToChat();
+
+
+    // cometd.handshake(function (handshakeReply) {
+    //     if (handshakeReply.successful) {
+    //         console.log('Handshake successful');
+    //         // 订阅聊天消息
+    //         s = cometd.subscribe(chatChannel, function (message) {
+    //             var messageData = message.data;
+    //             $('#chat-window-messages').append('<p>' + messageData.content + '</p>');
+    //             $('#chat-window').scrollTop($('#chat-window')[0].scrollHeight);
+    //         }, function (subscribeReply) {
+    //             if (subscribeReply.successful) {
+    //                 $('#chat-window-messages').append('<p>Subscribed to ' + chatChannel + '</p>');
+    //             } else {
+    //                 $('#chat-window-messages').append('<p>Could not subscribe to ' + chatChannel + '</p>');
+    //                 window.localStorage.removeItem('org.cometd.reload');
+    //                 cometd.handshake(function (handshakeReply) {
+    //                     if (handshakeReply.successful) {
+    //                         console.log('Handshake successful');
+    //                        // TODO
+    //                     }
+    //                 });
+    //             }
+    //         });
+    //     }
+    // });
+
+
+    $('#chat-unsubscribe').click(function () {
+        if (s) {
+            cometd.unsubscribe(s, function (unsubscribeReply) {
+                if (unsubscribeReply.successful) {
+                    $('#chat-window-messages').append('<p>Unsubscribed from ' + chatChannel + '</p>');
+                } else {
+                    $('#chat-window-messages').append('<p>Could not unsubscribe from ' + chatChannel + '</p>');
+                }
+            });
+        }
+    });
+
+
+    $('#chat-window-send').click(function () {
+        var message = $('#chat-window-input').val();
+        if (message.trim() !== '') {
+            // 发送消息到服务器
+            cometd.publish('/chat/privatechat', {
+                content: message,
+                chat: message,
+                user: 'websocket',
+                room: '/chat/privatechat'
+            });
+            $('#chat-window-input').val('');
+        }
+    });
+
+
+</script>
+</body>
+</html>
